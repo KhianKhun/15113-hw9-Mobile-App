@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, TextInput, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { COLORS } from '../constants';
 import { TimeSegment } from '../types';
 import { formatSegmentTimeDisplay, formatDurationFull } from '../utils/time';
@@ -12,6 +12,13 @@ interface Props {
   onLastEndChange: (text: string) => void;
   onBlur: () => void;
   timeError: string;
+  // Date inputs
+  firstStartDateInput: string;
+  lastEndDateInput: string;
+  onFirstStartDateChange: (text: string) => void;
+  onLastEndDateChange: (text: string) => void;
+  onDateBlur: () => void;
+  dateError: string;
 }
 
 export default function TimeEditor({
@@ -22,7 +29,15 @@ export default function TimeEditor({
   onLastEndChange,
   onBlur,
   timeError,
+  firstStartDateInput,
+  lastEndDateInput,
+  onFirstStartDateChange,
+  onLastEndDateChange,
+  onDateBlur,
+  dateError,
 }: Props) {
+  const [dateExpanded, setDateExpanded] = useState(false);
+
   return (
     <>
       {/* Segment list */}
@@ -42,7 +57,7 @@ export default function TimeEditor({
         ))}
       </View>
 
-      {/* Edit inputs */}
+      {/* Time edit inputs */}
       <View style={styles.timeEditRow}>
         <View style={styles.timeEditField}>
           <Text style={styles.timeEditHint}>First start</Text>
@@ -72,6 +87,50 @@ export default function TimeEditor({
         </View>
       </View>
       {!!timeError && <Text style={styles.errorText}>{timeError}</Text>}
+
+      {/* Date section — collapsible */}
+      <TouchableOpacity
+        style={styles.dateToggleRow}
+        onPress={() => setDateExpanded((v) => !v)}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.dateToggleLabel}>Edit dates</Text>
+        <Text style={styles.dateToggleIcon}>{dateExpanded ? '▲' : '▼'}</Text>
+      </TouchableOpacity>
+
+      {dateExpanded && (
+        <>
+          <View style={styles.timeEditRow}>
+            <View style={styles.timeEditField}>
+              <Text style={styles.timeEditHint}>Start date</Text>
+              <TextInput
+                style={[styles.input, styles.dateInput, !!dateError && styles.inputError]}
+                value={firstStartDateInput}
+                onChangeText={onFirstStartDateChange}
+                onBlur={onDateBlur}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={COLORS.textSecondary}
+                keyboardType="numbers-and-punctuation"
+                returnKeyType="done"
+              />
+            </View>
+            <View style={styles.timeEditField}>
+              <Text style={styles.timeEditHint}>End date</Text>
+              <TextInput
+                style={[styles.input, styles.dateInput, !!dateError && styles.inputError]}
+                value={lastEndDateInput}
+                onChangeText={onLastEndDateChange}
+                onBlur={onDateBlur}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={COLORS.textSecondary}
+                keyboardType="numbers-and-punctuation"
+                returnKeyType="done"
+              />
+            </View>
+          </View>
+          {!!dateError && <Text style={styles.errorText}>{dateError}</Text>}
+        </>
+      )}
     </>
   );
 }
@@ -137,10 +196,31 @@ const styles = StyleSheet.create({
   timeInput: {
     textAlign: 'center',
   },
+  dateInput: {
+    textAlign: 'center',
+    fontSize: 13,
+  },
   errorText: {
     color: COLORS.error,
     fontSize: 12,
     marginTop: 4,
     marginBottom: 4,
+  },
+  dateToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    paddingHorizontal: 2,
+    marginTop: 4,
+  },
+  dateToggleLabel: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  dateToggleIcon: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
   },
 });

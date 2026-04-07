@@ -2,14 +2,23 @@ import React, { useEffect, useRef } from 'react';
 import { Animated, Text, StyleSheet } from 'react-native';
 import { COLORS } from '../constants';
 
+type ToastType = 'info' | 'success' | 'error';
+
 interface Props {
   message: string;
   visible: boolean;
   onHide: () => void;
+  type?: ToastType;
   duration?: number; // ms, default 2000
 }
 
-export default function Toast({ message, visible, onHide, duration = 2000 }: Props) {
+const BORDER_COLOR: Record<ToastType, string> = {
+  info: COLORS.accent,
+  success: COLORS.success,
+  error: COLORS.error,
+};
+
+export default function Toast({ message, visible, onHide, type = 'info', duration = 2000 }: Props) {
   const opacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -25,7 +34,7 @@ export default function Toast({ message, visible, onHide, duration = 2000 }: Pro
   if (!visible) return null;
 
   return (
-    <Animated.View style={[styles.container, { opacity }]}>
+    <Animated.View style={[styles.container, { opacity, borderColor: BORDER_COLOR[type] }]}>
       <Text style={styles.text}>{message}</Text>
     </Animated.View>
   );
@@ -41,7 +50,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 14,
     borderWidth: 1,
-    borderColor: COLORS.accent,
     zIndex: 999,
     maxWidth: 280,
   },

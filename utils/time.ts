@@ -74,6 +74,30 @@ export function formatSegmentTimeDisplay(iso: string): string {
   });
 }
 
+// ─── Date parsing / formatting ────────────────────────────────────────────────
+
+/** Format a Date or ISO string as "YYYY-MM-DD" for the date edit inputs. */
+export function formatDateInput(iso: string): string {
+  const d = new Date(iso);
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${mo}-${day}`;
+}
+
+/** Parse "YYYY-MM-DD" into a Date (local midnight). Returns null if invalid. */
+export function parseDateInput(value: string): Date | null {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const y = parseInt(match[1], 10);
+  const mo = parseInt(match[2], 10);
+  const day = parseInt(match[3], 10);
+  if (mo < 1 || mo > 12 || day < 1 || day > 31) return null;
+  const d = new Date(y, mo - 1, day);
+  if (d.getFullYear() !== y || d.getMonth() + 1 !== mo || d.getDate() !== day) return null;
+  return d;
+}
+
 // ─── Time parsing ─────────────────────────────────────────────────────────────
 
 /** Parse "HH:MM" or "HH:MM:SS" (24h) into a Date, using referenceDate for the calendar date. */

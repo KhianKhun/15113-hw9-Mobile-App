@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  Alert,
+  Alert, // kept for delete confirmation dialog
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
@@ -23,8 +23,9 @@ import { ActivityRecord } from '../../types';
 import {
   formatDurationFull,
   formatSegmentTime,
+  formatDateInput,
   parseTimeInput,
-  parseEndTimeInput,
+  parseDateInput,
   computeTotalDuration,
   applyTimeEdits,
 } from '../../utils/time';
@@ -52,12 +53,19 @@ export default function DetailScreen() {
   const [timeError, setTimeError] = useState('');
   const [previewDuration, setPreviewDuration] = useState(0);
 
+  // Date editing
+  const [firstStartDateInput, setFirstStartDateInput] = useState('');
+  const [lastEndDateInput, setLastEndDateInput] = useState('');
+  const [dateError, setDateError] = useState('');
+
   // Toast
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'info' | 'success' | 'error'>('info');
 
-  function showToast(msg: string) {
+  function showToast(msg: string, type: 'info' | 'success' | 'error' = 'info') {
     setToastMessage(msg);
+    setToastType(type);
     setToastVisible(true);
   }
 
@@ -87,6 +95,8 @@ export default function DetailScreen() {
           if (found.segments.length > 0) {
             setFirstStartInput(formatSegmentTime(found.segments[0].start));
             setLastEndInput(formatSegmentTime(found.segments[found.segments.length - 1].end));
+            setFirstStartDateInput(formatDateInput(found.segments[0].start));
+            setLastEndDateInput(formatDateInput(found.segments[found.segments.length - 1].end));
           }
           setLoadError(false);
           setLoading(false);
@@ -129,25 +139,56 @@ export default function DetailScreen() {
     setCustomTags((prev) => prev.filter((t) => t !== tag));
   }
 
-  // ─── Time blur validation ────────────────────────────────────────────────────
+  // ─── Date blur validation ────────────────────────────────────────────────────
 
-  function handleTimeBlur() {
+  function handleDateBlur() {
     if (!record || record.segments.length === 0) return;
 
-    const refStart = new Date(record.segments[0].start);
-    const refEnd = new Date(record.segments[record.segments.length - 1].end);
+    const startDate = parseDateInput(firstStartDateInput);
+    if (!startDate) { setDateError('Invalid start date. Use YYYY-MM-DD.'); return; }
 
-    const newStart = parseTimeInput(firstStartInput, refStart);
+    const endDate = parseDateInput(lastEndDateInput);
+    if (!endDate) { setDateError('Invalid end date. Use YYYY-MM-DD.'); return; }
+
+    setDateError('');
+    // Re-run time validation with updated dates
+    handleTimeBlurWithDates(startDate, endDate);
+  }
+
+  // ─── Time blur validation ────────────────────────────────────────────────────
+
+  function handleTimeBlurWithDates(startDate: Date, endDate: Date) {
+    const newStart = parseTimeInput(firstStartInput, startDate);
     if (!newStart) { setTimeError('Invalid start time. Use HH:MM (24h).'); return; }
 
-    const newEnd = parseEndTimeInput(lastEndInput, refEnd, newStart);
+    let newEnd = parseTimeInput(lastEndInput, endDate);
     if (!newEnd) { setTimeError('Invalid end time. Use HH:MM (24h).'); return; }
+
+    // Midnight-crossing: advance end date by 1 day and update input
+    if (newEnd <= newStart) {
+      const nextDay = new Date(endDate);
+      nextDay.setDate(nextDay.getDate() + 1);
+      setLastEndDateInput(formatDateInput(nextDay.toISOString()));
+      newEnd = parseTimeInput(lastEndInput, nextDay)!;
+    }
 
     if (newStart >= newEnd) { setTimeError('Start time must be before end time.'); return; }
 
     setTimeError('');
-    const updatedSegments = applyTimeEdits(record.segments, newStart, newEnd);
+    const updatedSegments = applyTimeEdits(record!.segments, newStart, newEnd);
     setPreviewDuration(computeTotalDuration(updatedSegments));
+  }
+
+  function handleTimeBlur() {
+    if (!record || record.segments.length === 0) return;
+
+    const startDate = parseDateInput(firstStartDateInput);
+    if (!startDate) { setDateError('Invalid start date. Use YYYY-MM-DD.'); return; }
+
+    const endDate = parseDateInput(lastEndDateInput);
+    if (!endDate) { setDateError('Invalid end date. Use YYYY-MM-DD.'); return; }
+
+    handleTimeBlurWithDates(startDate, endDate);
   }
 
   // ─── Save ────────────────────────────────────────────────────────────────────
@@ -164,14 +205,26 @@ export default function DetailScreen() {
 
     let updatedSegments = [...record.segments];
     if (record.segments.length > 0) {
-      const refStart = new Date(record.segments[0].start);
-      const refEnd = new Date(record.segments[record.segments.length - 1].end);
+      const startDate = parseDateInput(firstStartDateInput);
+      if (!startDate) { setDateError('Invalid start date. Use YYYY-MM-DD.'); return; }
 
-      const newStart = parseTimeInput(firstStartInput, refStart);
+      const endDate = parseDateInput(lastEndDateInput);
+      if (!endDate) { setDateError('Invalid end date. Use YYYY-MM-DD.'); return; }
+
+      setDateError('');
+
+      const newStart = parseTimeInput(firstStartInput, startDate);
       if (!newStart) { setTimeError('Invalid start time. Use HH:MM (24h).'); return; }
 
-      const newEnd = parseEndTimeInput(lastEndInput, refEnd, newStart);
+      let newEnd = parseTimeInput(lastEndInput, endDate);
       if (!newEnd) { setTimeError('Invalid end time. Use HH:MM (24h).'); return; }
+
+      if (newEnd <= newStart) {
+        const nextDay = new Date(endDate);
+        nextDay.setDate(nextDay.getDate() + 1);
+        setLastEndDateInput(formatDateInput(nextDay.toISOString()));
+        newEnd = parseTimeInput(lastEndInput, nextDay)!;
+      }
 
       if (newStart >= newEnd) { setTimeError('Start time must be before end time.'); return; }
 
@@ -193,9 +246,9 @@ export default function DetailScreen() {
       await updateRecord(updated);
       setRecord(updated);
       setPreviewDuration(totalDuration);
-      Alert.alert('Saved', 'Changes saved successfully.');
+      showToast('Changes saved successfully', 'success');
     } catch (e) {
-      Alert.alert('Save Failed', 'Could not save changes. Please try again.');
+      showToast('Could not save changes. Please try again.', 'error');
     }
   }
 
@@ -216,7 +269,7 @@ export default function DetailScreen() {
               await deleteRecord(record.id);
               router.replace('/');
             } catch (e) {
-              Alert.alert('Delete Failed', 'Could not delete record. Please try again.');
+              showToast('Could not delete record. Please try again.', 'error');
             }
           },
         },
@@ -306,6 +359,12 @@ export default function DetailScreen() {
               onLastEndChange={setLastEndInput}
               onBlur={handleTimeBlur}
               timeError={timeError}
+              firstStartDateInput={firstStartDateInput}
+              lastEndDateInput={lastEndDateInput}
+              onFirstStartDateChange={setFirstStartDateInput}
+              onLastEndDateChange={setLastEndDateInput}
+              onDateBlur={handleDateBlur}
+              dateError={dateError}
             />
           </>
         )}
@@ -336,6 +395,7 @@ export default function DetailScreen() {
         message={toastMessage}
         visible={toastVisible}
         onHide={() => setToastVisible(false)}
+        type={toastType}
       />
     </SafeAreaView>
   );
