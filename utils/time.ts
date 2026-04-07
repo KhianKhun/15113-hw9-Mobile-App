@@ -115,3 +115,24 @@ export function computeTotalDuration(segments: TimeSegment[]): number {
     0,
   );
 }
+
+/**
+ * Apply edited start/end times to a segment array.
+ * Works correctly for both single-segment and multi-segment sessions:
+ * - If a segment is both first and last (single segment), both start and end are updated.
+ * - Otherwise only the relevant boundary is updated; middle segments are untouched.
+ */
+export function applyTimeEdits(
+  segments: TimeSegment[],
+  newStart: Date,
+  newEnd: Date,
+): TimeSegment[] {
+  return segments.map((seg, i) => {
+    const isFirst = i === 0;
+    const isLast = i === segments.length - 1;
+    if (isFirst && isLast) return { start: newStart.toISOString(), end: newEnd.toISOString() };
+    if (isFirst) return { ...seg, start: newStart.toISOString() };
+    if (isLast) return { ...seg, end: newEnd.toISOString() };
+    return seg;
+  });
+}

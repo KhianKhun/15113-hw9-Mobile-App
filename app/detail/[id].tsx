@@ -26,6 +26,7 @@ import {
   parseTimeInput,
   parseEndTimeInput,
   computeTotalDuration,
+  applyTimeEdits,
 } from '../../utils/time';
 import TagSelector from '../../components/TagSelector';
 import TimeEditor from '../../components/TimeEditor';
@@ -145,16 +146,7 @@ export default function DetailScreen() {
     if (newStart >= newEnd) { setTimeError('Start time must be before end time.'); return; }
 
     setTimeError('');
-    let updatedSegments = [...record.segments];
-    if (updatedSegments.length === 1) {
-      updatedSegments[0] = { start: newStart.toISOString(), end: newEnd.toISOString() };
-    } else {
-      updatedSegments = updatedSegments.map((seg, i) => {
-        if (i === 0) return { ...seg, start: newStart.toISOString() };
-        if (i === updatedSegments.length - 1) return { ...seg, end: newEnd.toISOString() };
-        return seg;
-      });
-    }
+    const updatedSegments = applyTimeEdits(record.segments, newStart, newEnd);
     setPreviewDuration(computeTotalDuration(updatedSegments));
   }
 
@@ -184,15 +176,7 @@ export default function DetailScreen() {
       if (newStart >= newEnd) { setTimeError('Start time must be before end time.'); return; }
 
       setTimeError('');
-      if (updatedSegments.length === 1) {
-        updatedSegments[0] = { start: newStart.toISOString(), end: newEnd.toISOString() };
-      } else {
-        updatedSegments = updatedSegments.map((seg, i) => {
-          if (i === 0) return { ...seg, start: newStart.toISOString() };
-          if (i === updatedSegments.length - 1) return { ...seg, end: newEnd.toISOString() };
-          return seg;
-        });
-      }
+      updatedSegments = applyTimeEdits(record.segments, newStart, newEnd);
     }
 
     const totalDuration = computeTotalDuration(updatedSegments);
