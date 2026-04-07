@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { FIXED_TAGS, COLORS } from '../constants';
+import { FIXED_TAGS, DEFAULT_TAG, COLORS } from '../constants';
 import {
   loadRecords,
   loadActiveSession,
@@ -94,7 +94,7 @@ export default function HistoryScreen() {
     }, []),
   );
 
-  const allTagFilters = ['All', ...FIXED_TAGS, ...customTags];
+  const allTagFilters = ['All', DEFAULT_TAG, ...FIXED_TAGS, ...customTags];
 
   const filtered = records.filter((r) => {
     const matchesSearch = r.name

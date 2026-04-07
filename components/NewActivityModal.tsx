@@ -10,8 +10,9 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { FIXED_TAGS, COLORS } from '../constants';
+import { FIXED_TAGS, DEFAULT_TAG, COLORS } from '../constants';
 import { loadCustomTags, saveCustomTags, deleteCustomTag } from '../storage/storage';
+import Toast from './Toast';
 
 interface Props {
   visible: boolean;
@@ -25,6 +26,7 @@ export default function NewActivityModal({ visible, onClose, onStart }: Props) {
   const [customTags, setCustomTags] = useState<string[]>([]);
   const [customTagInput, setCustomTagInput] = useState('');
   const [nameError, setNameError] = useState('');
+  const [toastVisible, setToastVisible] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -33,10 +35,11 @@ export default function NewActivityModal({ visible, onClose, onStart }: Props) {
       setSelectedTags([]);
       setCustomTagInput('');
       setNameError('');
+      setToastVisible(false);
     }
   }, [visible]);
 
-  const allTags = [...FIXED_TAGS, ...customTags];
+  const allTags = [DEFAULT_TAG, ...FIXED_TAGS, ...customTags];
 
   function toggleTag(tag: string) {
     setSelectedTags((prev) =>
@@ -68,12 +71,19 @@ export default function NewActivityModal({ visible, onClose, onStart }: Props) {
       setNameError('Please enter an activity name');
       return;
     }
-    if (selectedTags.length === 0) {
-      setNameError('Please select at least one tag');
+    setNameError('');
+
+    let finalTags = selectedTags;
+    if (finalTags.length === 0) {
+      finalTags = [DEFAULT_TAG];
+      setSelectedTags([DEFAULT_TAG]);
+      setToastVisible(true);
+      // Delay navigation so the toast is visible briefly
+      setTimeout(() => onStart(name.trim(), finalTags), 1800);
       return;
     }
-    setNameError('');
-    onStart(name.trim(), selectedTags);
+
+    onStart(name.trim(), finalTags);
   }
 
   return (
@@ -113,8 +123,20 @@ export default function NewActivityModal({ visible, onClose, onStart }: Props) {
             <Text style={styles.errorText}>{nameError}</Text>
           )}
 
-          <Text style={styles.label}>Tags * (select at least one)</Text>
+          <Text style={styles.label}>Tags (optional — Default assigned if empty)</Text>
           <View style={styles.tagContainer}>
+            {/* Default tag — non-deletable */}
+            <TouchableOpacity
+              key={DEFAULT_TAG}
+              style={[styles.tagChip, selectedTags.includes(DEFAULT_TAG) && styles.tagChipActive]}
+              onPress={() => toggleTag(DEFAULT_TAG)}
+            >
+              <Text style={[styles.tagText, selectedTags.includes(DEFAULT_TAG) && styles.tagTextActive]}>
+                {DEFAULT_TAG}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Fixed tags — non-deletable */}
             {FIXED_TAGS.map((tag) => (
               <TouchableOpacity
                 key={tag}
@@ -187,6 +209,13 @@ export default function NewActivityModal({ visible, onClose, onStart }: Props) {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      <Toast
+        message="No tag selected — Default tag assigned"
+        visible={toastVisible}
+        onHide={() => setToastVisible(false)}
+        duration={1500}
+      />
     </Modal>
   );
 }

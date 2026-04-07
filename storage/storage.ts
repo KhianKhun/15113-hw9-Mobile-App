@@ -19,6 +19,7 @@ export async function saveRecords(records: ActivityRecord[]): Promise<void> {
     await AsyncStorage.setItem(STORAGE_KEYS.RECORDS, JSON.stringify(records));
   } catch (e) {
     console.error('saveRecords failed:', e);
+    throw e;
   }
 }
 
@@ -68,6 +69,7 @@ export async function saveActiveSession(
     }
   } catch (e) {
     console.error('saveActiveSession failed:', e);
+    throw e;
   }
 }
 
@@ -88,6 +90,7 @@ export async function saveCustomTags(tags: string[]): Promise<void> {
     await AsyncStorage.setItem(STORAGE_KEYS.CUSTOM_TAGS, JSON.stringify(tags));
   } catch (e) {
     console.error('saveCustomTags failed:', e);
+    throw e;
   }
 }
 

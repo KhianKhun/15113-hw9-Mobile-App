@@ -1,3 +1,4 @@
+export const DEFAULT_TAG = 'Default';
 export const FIXED_TAGS = ['Work', 'Life', 'Study', 'Entertainment', 'Gym'] as const;
 
 export const STORAGE_KEYS = {

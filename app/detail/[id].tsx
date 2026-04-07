@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
-import { FIXED_TAGS, COLORS } from '../../constants';
+import { FIXED_TAGS, DEFAULT_TAG, COLORS } from '../../constants';
 import {
   loadRecords,
   updateRecord,
@@ -20,6 +20,7 @@ import {
   deleteCustomTag,
 } from '../../storage/storage';
 import { ActivityRecord, TimeSegment } from '../../types';
+import Toast from '../../components/Toast';
 
 function computeTotalDuration(segments: TimeSegment[]): number {
   return segments.reduce((acc, seg) => {
@@ -37,16 +38,22 @@ function formatDurationMs(ms: number): string {
   return `${s}s`;
 }
 
+// 24-hour format for edit fields (HH:MM)
 function formatSegmentTime(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const h = String(d.getHours()).padStart(2, '0');
+  const m = String(d.getMinutes()).padStart(2, '0');
+  return `${h}:${m}`;
 }
 
+// 12-hour format with AM/PM for display only
+function formatSegmentTimeDisplay(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+}
+
+// Parse HH:MM or HH:MM:SS into a Date. Handles cross-midnight: if parsed end < start, adds 1 day.
 function parseTimeInput(value: string, referenceDate: Date): Date | null {
-  // Accept HH:MM or HH:MM:SS
   const match = value.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
   if (!match) return null;
   const h = parseInt(match[1], 10);
@@ -56,6 +63,16 @@ function parseTimeInput(value: string, referenceDate: Date): Date | null {
   const d = new Date(referenceDate);
   d.setHours(h, m, s, 0);
   return d;
+}
+
+// Same as above but advances by 1 day if result is before startDate (cross-midnight)
+function parseEndTimeInput(value: string, referenceDate: Date, startDate: Date): Date | null {
+  const parsed = parseTimeInput(value, referenceDate);
+  if (!parsed) return null;
+  if (parsed <= startDate) {
+    parsed.setDate(parsed.getDate() + 1);
+  }
+  return parsed;
 }
 
 export default function DetailScreen() {
@@ -69,12 +86,24 @@ export default function DetailScreen() {
   const [customTags, setCustomTags] = useState<string[]>([]);
   const [customTagInput, setCustomTagInput] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [notFound, setNotFound] = useState(false);
 
   // Time editing
   const [firstStartInput, setFirstStartInput] = useState('');
   const [lastEndInput, setLastEndInput] = useState('');
   const [timeError, setTimeError] = useState('');
+  // Preview duration shown in the Total badge; updates on valid blur
+  const [previewDuration, setPreviewDuration] = useState(0);
+
+  // Toast
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+
+  function showToast(msg: string) {
+    setToastMessage(msg);
+    setToastVisible(true);
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -98,29 +127,30 @@ export default function DetailScreen() {
           setTags(found.tags);
           setNotes(found.notes ?? '');
           setCustomTags(cTags);
+          setPreviewDuration(found.totalDuration);
           if (found.segments.length > 0) {
-            setFirstStartInput(
-              formatSegmentTime(found.segments[0].start),
-            );
+            setFirstStartInput(formatSegmentTime(found.segments[0].start));
             setLastEndInput(
               formatSegmentTime(found.segments[found.segments.length - 1].end),
             );
           }
+          setLoadError(false);
           setLoading(false);
         } catch (e) {
           console.error('DetailScreen load failed:', e);
-          if (!cancelled) setLoading(false);
+          if (!cancelled) {
+            setLoadError(true);
+            setLoading(false);
+          }
         }
       }
 
       load();
-      return () => {
-        cancelled = true;
-      };
+      return () => { cancelled = true; };
     }, [id]),
   );
 
-  const allTags = [...FIXED_TAGS, ...customTags];
+  const allTags = [DEFAULT_TAG, ...FIXED_TAGS, ...customTags];
 
   function toggleTag(tag: string) {
     setTags((prev) =>
@@ -146,43 +176,79 @@ export default function DetailScreen() {
     setCustomTags((prev) => prev.filter((t) => t !== tag));
   }
 
-  async function handleSave() {
-    if (!record) return;
+  // Called on blur from either time input — validates and updates preview duration
+  function handleTimeBlur() {
+    if (!record || record.segments.length === 0) return;
+
+    const refStart = new Date(record.segments[0].start);
+    const refEnd = new Date(record.segments[record.segments.length - 1].end);
+
+    const newStart = parseTimeInput(firstStartInput, refStart);
+    if (!newStart) {
+      setTimeError('Invalid start time. Use HH:MM (24h).');
+      return;
+    }
+
+    const newEnd = parseEndTimeInput(lastEndInput, refEnd, newStart);
+    if (!newEnd) {
+      setTimeError('Invalid end time. Use HH:MM (24h).');
+      return;
+    }
+
+    if (newStart >= newEnd) {
+      setTimeError('Start time must be before end time.');
+      return;
+    }
+
+    // Valid — update preview duration
     setTimeError('');
-
     let updatedSegments = [...record.segments];
-
-    // Validate and apply time edits if segments exist
-    if (record.segments.length > 0) {
-      const refDate = new Date(record.segments[0].start);
-
-      const newStart = parseTimeInput(firstStartInput, refDate);
-      const newEnd = parseTimeInput(
-        lastEndInput,
-        new Date(record.segments[record.segments.length - 1].end),
-      );
-
-      if (!newStart || !newEnd) {
-        setTimeError('Invalid time format. Use HH:MM or HH:MM:SS.');
-        return;
-      }
-      if (newStart >= newEnd) {
-        setTimeError('Start time must be before end time.');
-        return;
-      }
-
+    if (updatedSegments.length === 1) {
+      updatedSegments[0] = { start: newStart.toISOString(), end: newEnd.toISOString() };
+    } else {
       updatedSegments = updatedSegments.map((seg, i) => {
         if (i === 0) return { ...seg, start: newStart.toISOString() };
-        if (i === updatedSegments.length - 1)
-          return { ...seg, end: newEnd.toISOString() };
+        if (i === updatedSegments.length - 1) return { ...seg, end: newEnd.toISOString() };
         return seg;
       });
-      // If only one segment, apply both
+    }
+    setPreviewDuration(computeTotalDuration(updatedSegments));
+  }
+
+  async function handleSave() {
+    if (!record) return;
+
+    // Tag validation: auto-assign Default if none selected
+    let finalTags = tags;
+    if (finalTags.length === 0) {
+      finalTags = [DEFAULT_TAG];
+      setTags([DEFAULT_TAG]);
+      showToast('No tag selected — Default tag assigned');
+    }
+
+    // Time validation (same logic as blur, re-run to block save if still invalid)
+    let updatedSegments = [...record.segments];
+    if (record.segments.length > 0) {
+      const refStart = new Date(record.segments[0].start);
+      const refEnd = new Date(record.segments[record.segments.length - 1].end);
+
+      const newStart = parseTimeInput(firstStartInput, refStart);
+      if (!newStart) { setTimeError('Invalid start time. Use HH:MM (24h).'); return; }
+
+      const newEnd = parseEndTimeInput(lastEndInput, refEnd, newStart);
+      if (!newEnd) { setTimeError('Invalid end time. Use HH:MM (24h).'); return; }
+
+      if (newStart >= newEnd) { setTimeError('Start time must be before end time.'); return; }
+
+      setTimeError('');
       if (updatedSegments.length === 1) {
-        updatedSegments[0] = {
-          start: newStart.toISOString(),
-          end: newEnd.toISOString(),
-        };
+        updatedSegments[0] = { start: newStart.toISOString(), end: newEnd.toISOString() };
+      } else {
+        updatedSegments = updatedSegments.map((seg, i) => {
+          if (i === 0) return { ...seg, start: newStart.toISOString() };
+          if (i === updatedSegments.length - 1) return { ...seg, end: newEnd.toISOString() };
+          return seg;
+        });
       }
     }
 
@@ -191,15 +257,20 @@ export default function DetailScreen() {
     const updated: ActivityRecord = {
       ...record,
       name: name.trim() || record.name,
-      tags: tags.length > 0 ? tags : record.tags,
+      tags: finalTags,
       notes: notes.trim() || null,
       segments: updatedSegments,
       totalDuration,
     };
 
-    await updateRecord(updated);
-    setRecord(updated);
-    Alert.alert('Saved', 'Changes saved successfully.');
+    try {
+      await updateRecord(updated);
+      setRecord(updated);
+      setPreviewDuration(totalDuration);
+      Alert.alert('Saved', 'Changes saved successfully.');
+    } catch (e) {
+      Alert.alert('Save Failed', 'Could not save changes. Please try again.');
+    }
   }
 
   async function handleDelete() {
@@ -213,8 +284,12 @@ export default function DetailScreen() {
           style: 'destructive',
           onPress: async () => {
             if (!record) return;
-            await deleteRecord(record.id);
-            router.replace('/');
+            try {
+              await deleteRecord(record.id);
+              router.replace('/');
+            } catch (e) {
+              Alert.alert('Delete Failed', 'Could not delete record. Please try again.');
+            }
           },
         },
       ],
@@ -225,6 +300,18 @@ export default function DetailScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <Text style={styles.statusText}>Loading...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Text style={styles.statusText}>Could not load record.</Text>
+        <Text style={styles.statusSubtext}>Check your storage and try again.</Text>
+        <TouchableOpacity onPress={() => router.replace('/')}>
+          <Text style={styles.backLink}>Go back</Text>
+        </TouchableOpacity>
       </SafeAreaView>
     );
   }
@@ -240,27 +327,17 @@ export default function DetailScreen() {
     );
   }
 
-  const totalDuration = record.segments.length > 0
-    ? computeTotalDuration(
-        record.segments.map((seg, i) => {
-          // Use edited values for display
-          if (i === 0 || i === record.segments.length - 1) return seg;
-          return seg;
-        }),
-      )
-    : record.totalDuration;
-
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Total duration */}
+        {/* Total duration — updates live on valid blur */}
         <View style={styles.durationBadge}>
           <Text style={styles.durationLabel}>Total</Text>
           <Text style={styles.durationValue}>
-            {formatDurationMs(record.totalDuration)}
+            {formatDurationMs(previewDuration)}
           </Text>
         </View>
 
@@ -278,25 +355,31 @@ export default function DetailScreen() {
         {/* Tags */}
         <Text style={styles.label}>Tags</Text>
         <View style={styles.tagContainer}>
+          {/* Default tag — non-deletable */}
+          <TouchableOpacity
+            key={DEFAULT_TAG}
+            style={[styles.tagChip, tags.includes(DEFAULT_TAG) && styles.tagChipActive]}
+            onPress={() => toggleTag(DEFAULT_TAG)}
+          >
+            <Text style={[styles.tagText, tags.includes(DEFAULT_TAG) && styles.tagTextActive]}>
+              {DEFAULT_TAG}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Fixed tags — non-deletable */}
           {FIXED_TAGS.map((tag) => (
             <TouchableOpacity
               key={tag}
-              style={[
-                styles.tagChip,
-                tags.includes(tag) && styles.tagChipActive,
-              ]}
+              style={[styles.tagChip, tags.includes(tag) && styles.tagChipActive]}
               onPress={() => toggleTag(tag)}
             >
-              <Text
-                style={[
-                  styles.tagText,
-                  tags.includes(tag) && styles.tagTextActive,
-                ]}
-              >
+              <Text style={[styles.tagText, tags.includes(tag) && styles.tagTextActive]}>
                 {tag}
               </Text>
             </TouchableOpacity>
           ))}
+
+          {/* Custom tags — deletable */}
           {customTags.map((tag) => (
             <View
               key={tag}
@@ -307,12 +390,7 @@ export default function DetailScreen() {
               ]}
             >
               <TouchableOpacity onPress={() => toggleTag(tag)}>
-                <Text
-                  style={[
-                    styles.tagText,
-                    tags.includes(tag) && styles.tagTextActive,
-                  ]}
-                >
+                <Text style={[styles.tagText, tags.includes(tag) && styles.tagTextActive]}>
                   {tag}
                 </Text>
               </TouchableOpacity>
@@ -349,7 +427,7 @@ export default function DetailScreen() {
                 <View key={i} style={styles.segmentRow}>
                   <Text style={styles.segmentIndex}>{i + 1}</Text>
                   <Text style={styles.segmentTime}>
-                    {formatSegmentTime(seg.start)} – {formatSegmentTime(seg.end)}
+                    {formatSegmentTimeDisplay(seg.start)} – {formatSegmentTimeDisplay(seg.end)}
                   </Text>
                   <Text style={styles.segmentDuration}>
                     {formatDurationMs(
@@ -360,14 +438,15 @@ export default function DetailScreen() {
               ))}
             </View>
 
-            <Text style={styles.label}>Edit Start / End Times (HH:MM)</Text>
+            <Text style={styles.label}>Edit Start / End Times (HH:MM, 24h)</Text>
             <View style={styles.timeEditRow}>
               <View style={styles.timeEditField}>
                 <Text style={styles.timeEditHint}>First start</Text>
                 <TextInput
-                  style={[styles.input, styles.timeInput]}
+                  style={[styles.input, styles.timeInput, !!timeError && styles.inputError]}
                   value={firstStartInput}
                   onChangeText={setFirstStartInput}
+                  onBlur={handleTimeBlur}
                   placeholder="HH:MM"
                   placeholderTextColor={COLORS.textSecondary}
                   keyboardType="numbers-and-punctuation"
@@ -377,9 +456,10 @@ export default function DetailScreen() {
               <View style={styles.timeEditField}>
                 <Text style={styles.timeEditHint}>Last end</Text>
                 <TextInput
-                  style={[styles.input, styles.timeInput]}
+                  style={[styles.input, styles.timeInput, !!timeError && styles.inputError]}
                   value={lastEndInput}
                   onChangeText={setLastEndInput}
+                  onBlur={handleTimeBlur}
                   placeholder="HH:MM"
                   placeholderTextColor={COLORS.textSecondary}
                   keyboardType="numbers-and-punctuation"
@@ -416,6 +496,12 @@ export default function DetailScreen() {
           <Text style={styles.deleteBtnText}>Delete Record</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <Toast
+        message={toastMessage}
+        visible={toastVisible}
+        onHide={() => setToastVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -435,6 +521,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 60,
     fontSize: 15,
+  },
+  statusSubtext: {
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginTop: 6,
+    fontSize: 13,
   },
   backLink: {
     color: COLORS.accent,
@@ -486,6 +578,9 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     marginBottom: 4,
   },
+  inputError: {
+    borderColor: COLORS.error,
+  },
   notesInput: {
     minHeight: 100,
     textAlignVertical: 'top',
@@ -504,19 +599,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
+  tagChipActive: {
+    backgroundColor: COLORS.accentDim,
+    borderColor: COLORS.accent,
+  },
   tagChipCustom: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-  },
-  deleteTagText: {
-    color: COLORS.textSecondary,
-    fontSize: 16,
-    lineHeight: 18,
-  },
-  tagChipActive: {
-    backgroundColor: COLORS.accentDim,
-    borderColor: COLORS.accent,
   },
   tagText: {
     color: COLORS.textSecondary,
@@ -526,6 +616,11 @@ const styles = StyleSheet.create({
   tagTextActive: {
     color: COLORS.accent,
     fontWeight: '600',
+  },
+  deleteTagText: {
+    color: COLORS.textSecondary,
+    fontSize: 16,
+    lineHeight: 18,
   },
   customTagRow: {
     flexDirection: 'row',
