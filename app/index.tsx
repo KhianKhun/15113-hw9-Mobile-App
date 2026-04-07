@@ -19,30 +19,9 @@ import {
   saveActiveSession,
 } from '../storage/storage';
 import { ActivityRecord, ActiveSession } from '../types';
+import { generateId } from '../utils/id';
 import NewActivityModal from '../components/NewActivityModal';
-
-function generateId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2);
-}
-
-function formatDuration(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const s = totalSeconds % 60;
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
+import RecordCard from '../components/RecordCard';
 
 export default function HistoryScreen() {
   const router = useRouter();
@@ -60,7 +39,6 @@ export default function HistoryScreen() {
 
       async function init() {
         try {
-          // If there is an active session, redirect straight to timer
           const session = await loadActiveSession();
           if (cancelled) return;
           if (session) {
@@ -88,20 +66,15 @@ export default function HistoryScreen() {
       }
 
       init();
-      return () => {
-        cancelled = true;
-      };
+      return () => { cancelled = true; };
     }, []),
   );
 
   const allTagFilters = ['All', DEFAULT_TAG, ...FIXED_TAGS, ...customTags];
 
   const filtered = records.filter((r) => {
-    const matchesSearch = r.name
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase());
-    const matchesTag =
-      activeTag === 'All' || r.tags.includes(activeTag);
+    const matchesSearch = r.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesTag = activeTag === 'All' || r.tags.includes(activeTag);
     return matchesSearch && matchesTag;
   });
 
@@ -128,9 +101,7 @@ export default function HistoryScreen() {
 
       {loadError && (
         <View style={styles.errorBanner}>
-          <Text style={styles.errorBannerText}>
-            Could not load saved data
-          </Text>
+          <Text style={styles.errorBannerText}>Could not load saved data</Text>
         </View>
       )}
 
@@ -167,18 +138,10 @@ export default function HistoryScreen() {
         {allTagFilters.map((tag) => (
           <TouchableOpacity
             key={tag}
-            style={[
-              styles.tagChip,
-              activeTag === tag && styles.tagChipActive,
-            ]}
+            style={[styles.tagChip, activeTag === tag && styles.tagChipActive]}
             onPress={() => setActiveTag(tag)}
           >
-            <Text
-              style={[
-                styles.tagText,
-                activeTag === tag && styles.tagTextActive,
-              ]}
-            >
+            <Text style={[styles.tagText, activeTag === tag && styles.tagTextActive]}>
               {tag}
             </Text>
           </TouchableOpacity>
@@ -197,35 +160,15 @@ export default function HistoryScreen() {
             <Text style={styles.emptyIcon}>⏱</Text>
             <Text style={styles.emptyText}>No activities yet</Text>
             <Text style={styles.emptySubtext}>
-              {hasActiveSession
-                ? 'A session is active — loading...'
-                : 'Tap + to start tracking'}
+              {hasActiveSession ? 'A session is active — loading...' : 'Tap + to start tracking'}
             </Text>
           </View>
         }
         renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.card}
+          <RecordCard
+            record={item}
             onPress={() => router.push(`/detail/${item.id}`)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.cardHeader}>
-              <Text style={styles.cardName} numberOfLines={1}>
-                {item.name}
-              </Text>
-              <Text style={styles.cardDuration}>
-                {formatDuration(item.totalDuration)}
-              </Text>
-            </View>
-            <Text style={styles.cardDate}>{formatDate(item.createdAt)}</Text>
-            <View style={styles.cardTags}>
-              {item.tags.map((tag) => (
-                <View key={tag} style={styles.cardTag}>
-                  <Text style={styles.cardTagText}>{tag}</Text>
-                </View>
-              ))}
-            </View>
-          </TouchableOpacity>
+          />
         )}
       />
 
@@ -348,55 +291,6 @@ const styles = StyleSheet.create({
   emptySubtext: {
     color: COLORS.textSecondary,
     fontSize: 14,
-  },
-  card: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  cardName: {
-    color: COLORS.text,
-    fontSize: 16,
-    fontWeight: '600',
-    flex: 1,
-    marginRight: 8,
-  },
-  cardDuration: {
-    color: COLORS.accent,
-    fontSize: 15,
-    fontWeight: '700',
-    fontVariant: ['tabular-nums'],
-  },
-  cardDate: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    marginBottom: 10,
-  },
-  cardTags: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  cardTag: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: COLORS.surfaceElevated,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  cardTagText: {
-    color: COLORS.textSecondary,
-    fontSize: 11,
-    fontWeight: '500',
   },
   fab: {
     position: 'absolute',

@@ -5,13 +5,13 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  ScrollView,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { FIXED_TAGS, DEFAULT_TAG, COLORS } from '../constants';
+import { DEFAULT_TAG, COLORS } from '../constants';
 import { loadCustomTags, saveCustomTags, deleteCustomTag } from '../storage/storage';
+import TagSelector from './TagSelector';
 import Toast from './Toast';
 
 interface Props {
@@ -39,8 +39,6 @@ export default function NewActivityModal({ visible, onClose, onStart }: Props) {
     }
   }, [visible]);
 
-  const allTags = [DEFAULT_TAG, ...FIXED_TAGS, ...customTags];
-
   function toggleTag(tag: string) {
     setSelectedTags((prev) =>
       prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
@@ -49,7 +47,7 @@ export default function NewActivityModal({ visible, onClose, onStart }: Props) {
 
   function handleAddCustomTag() {
     const trimmed = customTagInput.trim();
-    if (!trimmed || allTags.includes(trimmed)) {
+    if (!trimmed || customTags.includes(trimmed)) {
       setCustomTagInput('');
       return;
     }
@@ -78,7 +76,6 @@ export default function NewActivityModal({ visible, onClose, onStart }: Props) {
       finalTags = [DEFAULT_TAG];
       setSelectedTags([DEFAULT_TAG]);
       setToastVisible(true);
-      // Delay navigation so the toast is visible briefly
       setTimeout(() => onStart(name.trim(), finalTags), 1800);
       return;
     }
@@ -97,11 +94,7 @@ export default function NewActivityModal({ visible, onClose, onStart }: Props) {
         style={styles.overlay}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <TouchableOpacity
-          style={styles.backdrop}
-          onPress={onClose}
-          activeOpacity={1}
-        />
+        <TouchableOpacity style={styles.backdrop} onPress={onClose} activeOpacity={1} />
         <View style={styles.sheet}>
           <View style={styles.handle} />
           <Text style={styles.title}>New Activity</Text>
@@ -112,93 +105,22 @@ export default function NewActivityModal({ visible, onClose, onStart }: Props) {
             placeholder="e.g. Coding, Gym, Homework..."
             placeholderTextColor={COLORS.textSecondary}
             value={name}
-            onChangeText={(t) => {
-              setName(t);
-              setNameError('');
-            }}
+            onChangeText={(t) => { setName(t); setNameError(''); }}
             autoFocus
             returnKeyType="done"
           />
-          {!!nameError && (
-            <Text style={styles.errorText}>{nameError}</Text>
-          )}
+          {!!nameError && <Text style={styles.errorText}>{nameError}</Text>}
 
           <Text style={styles.label}>Tags (optional — Default assigned if empty)</Text>
-          <View style={styles.tagContainer}>
-            {/* Default tag — non-deletable */}
-            <TouchableOpacity
-              key={DEFAULT_TAG}
-              style={[styles.tagChip, selectedTags.includes(DEFAULT_TAG) && styles.tagChipActive]}
-              onPress={() => toggleTag(DEFAULT_TAG)}
-            >
-              <Text style={[styles.tagText, selectedTags.includes(DEFAULT_TAG) && styles.tagTextActive]}>
-                {DEFAULT_TAG}
-              </Text>
-            </TouchableOpacity>
-
-            {/* Fixed tags — non-deletable */}
-            {FIXED_TAGS.map((tag) => (
-              <TouchableOpacity
-                key={tag}
-                style={[
-                  styles.tagChip,
-                  selectedTags.includes(tag) && styles.tagChipActive,
-                ]}
-                onPress={() => toggleTag(tag)}
-              >
-                <Text
-                  style={[
-                    styles.tagText,
-                    selectedTags.includes(tag) && styles.tagTextActive,
-                  ]}
-                >
-                  {tag}
-                </Text>
-              </TouchableOpacity>
-            ))}
-            {customTags.map((tag) => (
-              <View
-                key={tag}
-                style={[
-                  styles.tagChip,
-                  selectedTags.includes(tag) && styles.tagChipActive,
-                  styles.tagChipCustom,
-                ]}
-              >
-                <TouchableOpacity onPress={() => toggleTag(tag)}>
-                  <Text
-                    style={[
-                      styles.tagText,
-                      selectedTags.includes(tag) && styles.tagTextActive,
-                    ]}
-                  >
-                    {tag}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => handleDeleteCustomTag(tag)}
-                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                >
-                  <Text style={styles.deleteTagText}>×</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </View>
-
-          <View style={styles.customTagRow}>
-            <TextInput
-              style={[styles.input, styles.customTagInput]}
-              placeholder="Add custom tag..."
-              placeholderTextColor={COLORS.textSecondary}
-              value={customTagInput}
-              onChangeText={setCustomTagInput}
-              onSubmitEditing={handleAddCustomTag}
-              returnKeyType="done"
-            />
-            <TouchableOpacity style={styles.addTagBtn} onPress={handleAddCustomTag}>
-              <Text style={styles.addTagBtnText}>Add</Text>
-            </TouchableOpacity>
-          </View>
+          <TagSelector
+            selectedTags={selectedTags}
+            onToggle={toggleTag}
+            customTags={customTags}
+            onDeleteCustomTag={handleDeleteCustomTag}
+            customTagInput={customTagInput}
+            onCustomTagInputChange={setCustomTagInput}
+            onAddCustomTag={handleAddCustomTag}
+          />
 
           <TouchableOpacity style={styles.startBtn} onPress={handleStart}>
             <Text style={styles.startBtnText}>Start</Text>
@@ -278,72 +200,13 @@ const styles = StyleSheet.create({
     marginTop: -12,
     marginBottom: 12,
   },
-  tagContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 16,
-  },
-  tagChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: COLORS.surfaceElevated,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  tagChipCustom: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  deleteTagText: {
-    color: COLORS.textSecondary,
-    fontSize: 16,
-    lineHeight: 18,
-  },
-  tagChipActive: {
-    backgroundColor: COLORS.accentDim,
-    borderColor: COLORS.accent,
-  },
-  tagText: {
-    color: COLORS.textSecondary,
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  tagTextActive: {
-    color: COLORS.accent,
-    fontWeight: '600',
-  },
-  customTagRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 24,
-  },
-  customTagInput: {
-    flex: 1,
-    marginBottom: 0,
-  },
-  addTagBtn: {
-    backgroundColor: COLORS.surfaceElevated,
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  addTagBtnText: {
-    color: COLORS.accent,
-    fontSize: 14,
-    fontWeight: '600',
-  },
   startBtn: {
     backgroundColor: COLORS.accent,
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
     marginBottom: 12,
+    marginTop: 8,
   },
   startBtnText: {
     color: '#000',

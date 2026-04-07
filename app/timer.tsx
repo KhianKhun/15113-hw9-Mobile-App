@@ -17,48 +17,15 @@ import {
   addRecord,
 } from '../storage/storage';
 import { ActiveSession, ActivityRecord, TimeSegment } from '../types';
+import { formatElapsed, formatStartTime, computeTotalDuration } from '../utils/time';
 import PostSessionModal from '../components/PostSessionModal';
 
-function generateId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2);
-}
-
 function computeElapsed(session: ActiveSession): number {
-  // Sum all completed segments
-  const completedMs = session.segments.reduce((acc, seg) => {
-    return acc + (new Date(seg.end).getTime() - new Date(seg.start).getTime());
-  }, 0);
-
-  // Add the ongoing segment if not paused
+  const completedMs = computeTotalDuration(session.segments);
   if (!session.isPaused && session.currentSegmentStart) {
-    const ongoingMs =
-      Date.now() - new Date(session.currentSegmentStart).getTime();
-    return completedMs + ongoingMs;
+    return completedMs + (Date.now() - new Date(session.currentSegmentStart).getTime());
   }
-
   return completedMs;
-}
-
-function formatElapsed(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const s = totalSeconds % 60;
-  return [
-    String(h).padStart(2, '0'),
-    String(m).padStart(2, '0'),
-    String(s).padStart(2, '0'),
-  ].join(':');
-}
-
-function formatStartTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 }
 
 export default function TimerScreen() {
