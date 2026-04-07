@@ -90,3 +90,8 @@ export async function saveCustomTags(tags: string[]): Promise<void> {
     console.error('saveCustomTags failed:', e);
   }
 }
+
+export async function deleteCustomTag(tag: string): Promise<void> {
+  const tags = await loadCustomTags();
+  await saveCustomTags(tags.filter((t) => t !== tag));
+}

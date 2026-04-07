@@ -16,6 +16,8 @@ import {
   updateRecord,
   deleteRecord,
   loadCustomTags,
+  saveCustomTags,
+  deleteCustomTag,
 } from '../../storage/storage';
 import { ActivityRecord, TimeSegment } from '../../types';
 
@@ -132,9 +134,16 @@ export default function DetailScreen() {
       setCustomTagInput('');
       return;
     }
-    setCustomTags((prev) => [...prev, trimmed]);
+    const updated = [...customTags, trimmed];
+    setCustomTags(updated);
+    saveCustomTags(updated);
     setTags((prev) => [...prev, trimmed]);
     setCustomTagInput('');
+  }
+
+  async function handleDeleteCustomTag(tag: string) {
+    await deleteCustomTag(tag);
+    setCustomTags((prev) => prev.filter((t) => t !== tag));
   }
 
   async function handleSave() {
@@ -269,7 +278,7 @@ export default function DetailScreen() {
         {/* Tags */}
         <Text style={styles.label}>Tags</Text>
         <View style={styles.tagContainer}>
-          {allTags.map((tag) => (
+          {FIXED_TAGS.map((tag) => (
             <TouchableOpacity
               key={tag}
               style={[
@@ -287,6 +296,33 @@ export default function DetailScreen() {
                 {tag}
               </Text>
             </TouchableOpacity>
+          ))}
+          {customTags.map((tag) => (
+            <View
+              key={tag}
+              style={[
+                styles.tagChip,
+                tags.includes(tag) && styles.tagChipActive,
+                styles.tagChipCustom,
+              ]}
+            >
+              <TouchableOpacity onPress={() => toggleTag(tag)}>
+                <Text
+                  style={[
+                    styles.tagText,
+                    tags.includes(tag) && styles.tagTextActive,
+                  ]}
+                >
+                  {tag}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => handleDeleteCustomTag(tag)}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              >
+                <Text style={styles.deleteTagText}>×</Text>
+              </TouchableOpacity>
+            </View>
           ))}
         </View>
         <View style={styles.customTagRow}>
@@ -467,6 +503,16 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surfaceElevated,
     borderWidth: 1,
     borderColor: COLORS.border,
+  },
+  tagChipCustom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  deleteTagText: {
+    color: COLORS.textSecondary,
+    fontSize: 16,
+    lineHeight: 18,
   },
   tagChipActive: {
     backgroundColor: COLORS.accentDim,

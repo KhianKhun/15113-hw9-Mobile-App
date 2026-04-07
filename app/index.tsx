@@ -136,15 +136,25 @@ export default function HistoryScreen() {
 
       {/* Search bar */}
       <View style={styles.searchRow}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search activities..."
-          placeholderTextColor={COLORS.textSecondary}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          clearButtonMode="while-editing"
-          returnKeyType="search"
-        />
+        <View style={styles.searchInputWrapper}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search activities..."
+            placeholderTextColor={COLORS.textSecondary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setSearchQuery('')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={styles.searchClearBtn}
+            >
+              <Text style={styles.searchClearText}>×</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {/* Tag filter chips */}
@@ -259,15 +269,28 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 8,
   },
-  searchInput: {
+  searchInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: COLORS.surface,
-    color: COLORS.text,
     borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  searchInput: {
+    flex: 1,
+    color: COLORS.text,
     paddingHorizontal: 14,
     paddingVertical: 10,
     fontSize: 15,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+  },
+  searchClearBtn: {
+    paddingHorizontal: 12,
+  },
+  searchClearText: {
+    color: COLORS.textSecondary,
+    fontSize: 20,
+    lineHeight: 22,
   },
   tagScroll: {
     maxHeight: 48,
